@@ -1,19 +1,21 @@
-import { StyleSheet, View, TouchableOpacity, FlatList, Image, SafeAreaView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, FlatList, Image, SafeAreaView, Alert } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { getListings } from '@/lib/listings';
+import { getListings, deleteListing } from '@/lib/listings';
 
 type ParkingListing = {
   id: string;
+  host_id: string;
   title: string;
+  description: string;
   address: string;
-  price: number;
-  rating: number;
+  price: string;
   images: string[];
+  rating?: number;
 };
 
 export default function HomeScreen() {
@@ -34,8 +36,19 @@ export default function HomeScreen() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteListing(id);
+      setListings(prev => prev.filter(listing => listing.id !== id));
+      Alert.alert('Success', 'Listing deleted successfully');
+    } catch (error) {
+      console.error('Error deleting listing:', error);
+      Alert.alert('Error', 'Failed to delete listing. Please try again.');
+    }
+  };
+
   const renderListing = ({ item }: { item: ParkingListing }) => (
-    <TouchableOpacity style={styles.card} onPress={() => {}}>
+    <View style={styles.card}>
       <View style={styles.imageContainer}>
         {item.images && item.images.length > 0 ? (
           <Image source={{ uri: item.images[0] }} style={styles.image} />
@@ -50,11 +63,16 @@ export default function HomeScreen() {
         <ThemedText style={styles.address}>{item.address}</ThemedText>
         <View style={styles.ratingContainer}>
           <FontAwesome name="star" size={16} color="#FFD700" />
-          <ThemedText style={styles.rating}>{item.rating.toFixed(1)}</ThemedText>
+          <ThemedText style={styles.rating}>{item.rating?.toFixed(1) || 'N/A'}</ThemedText>
         </View>
         <ThemedText style={styles.price}>${item.price}/hour</ThemedText>
+        {user?.uid === item.host_id && (
+          <TouchableOpacity onPress={() => handleDelete(item.id)}>
+            <FontAwesome name="trash" size={24} color="red" />
+          </TouchableOpacity>
+        )}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 
   return (

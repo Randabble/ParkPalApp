@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { db } from '../firebase';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
 export type Listing = {
   id: string;
@@ -6,61 +7,48 @@ export type Listing = {
   title: string;
   description: string;
   address: string;
-  price: number;
+  price: string;
   images: string[];
-  rating: number;
-  created_at: string;
+  rating?: number;
+  created_at?: Date;
 };
 
-export async function createListing(listing: Omit<Listing, 'id' | 'host_id' | 'rating' | 'created_at'>) {
-  const { data, error } = await supabase
-    .from('listings')
-    .insert([listing])
-    .select()
-    .single();
+export const createListing = async (listingData: Listing) => {
+  try {
+    const docRef = await addDoc(collection(db, 'listings'), listingData);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding listing:', error);
+    throw error;
+  }
+};
 
-  if (error) throw error;
-  return data;
-}
+export const getListings = async (): Promise<Listing[]> => {
+  const querySnapshot = await getDocs(collection(db, 'listings'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Listing[];
+};
 
-export async function getListings() {
-  const { data, error } = await supabase
-    .from('listings')
-    .select('*')
-    .order('created_at', { ascending: false });
+export const getListingsByHostId = async (hostId: string): Promise<Listing[]> => {
+  const allListings = await getListings();
+  return allListings.filter((listing: Listing) => listing.host_id === hostId);
+};
 
-  if (error) throw error;
-  return data;
-}
+export const updateListing = async (id: string, updatedData: Partial<Listing>) => {
+  try {
+    const listingRef = doc(db, 'listings', id);
+    await updateDoc(listingRef, updatedData);
+  } catch (error) {
+    console.error('Error updating listing:', error);
+    throw error;
+  }
+};
 
-export async function getListingsByHostId(hostId: string) {
-  const { data, error } = await supabase
-    .from('listings')
-    .select('*')
-    .eq('host_id', hostId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return data;
-}
-
-export async function updateListing(id: string, updates: Partial<Listing>) {
-  const { data, error } = await supabase
-    .from('listings')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteListing(id: string) {
-  const { error } = await supabase
-    .from('listings')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
-} 
+export const deleteListing = async (id: string) => {
+  try {
+    const listingRef = doc(db, 'listings', id);
+    await deleteDoc(listingRef);
+  } catch (error) {
+    console.error('Error deleting listing:', error);
+    throw error;
+  }
+}; 

@@ -1,8 +1,12 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { auth } from '../firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 type User = {
   id: string;
+  uid: string;
   email: string;
   role: 'host' | 'driver';
 };
@@ -22,20 +26,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUserRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-    
-    if (error || !data) {
-      console.log('Could not fetch role from database, checking auth metadata');
-      // If we can't get the role from the database, check auth metadata
-      const { data: { user } } = await supabase.auth.getUser();
-      return user?.user_metadata?.role || 'driver';
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      return userDoc.data().role;
+    } else {
+      console.log('Could not fetch role from database, defaulting to driver');
+      return 'driver';
     }
-    
-    return data.role;
   };
 
   const updateUserState = async (sessionUser: any) => {
@@ -45,17 +42,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const role = await fetchUserRole(sessionUser.id);
+      const role = await fetchUserRole(sessionUser.uid);
       setUser({
-        id: sessionUser.id,
+        id: sessionUser.uid,
+        uid: sessionUser.uid,
         email: sessionUser.email!,
         role,
       });
     } catch (error) {
       console.error('Error updating user state:', error);
-      // If there's an error, we'll just set the role to driver instead of signing out
       setUser({
-        id: sessionUser.id,
+        id: sessionUser.uid,
+        uid: sessionUser.uid,
         email: sessionUser.email!,
         role: 'driver',
       });
@@ -63,60 +61,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await updateUserState(session.user);
-      }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      await updateUserState(user);
       setLoading(false);
     });
 
-    // Listen for changes on auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await updateUserState(session.user);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      throw error;
+    }
   };
 
   const signUp = async (email: string, password: string, role: 'host' | 'driver') => {
-    const { error: signUpError, data } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          role,
-        },
-      },
-    });
-    if (signUpError) throw signUpError;
-
-    if (!data.user) throw new Error('User not found after signup');
-
-    // Insert into users table
-    const { error: insertError } = await supabase
-      .from('users')
-      .insert([{ id: data.user.id, email, role }]);
-    
-    // If insert fails, we'll still let the user register
-    if (insertError) {
-      console.error('Error inserting user into users table:', insertError);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await setDoc(doc(db, 'users', user.uid), { email, role });
+    } catch (error) {
+      throw error;
     }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      await firebaseSignOut(auth);
+    } catch (error) {
+      throw error;
+    }
   };
 
   const value = {

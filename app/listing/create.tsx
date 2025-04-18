@@ -6,8 +6,9 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { createListing } from '@/lib/listings';
-import { supabase } from '@/lib/supabase';
-import { decode } from 'base64-arraybuffer';
+import { db, storage, auth } from '../../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useAuth } from '../../contexts/AuthContext';
 
 type ListingForm = {
   title: string;
@@ -27,6 +28,8 @@ export default function CreateListingScreen() {
     images: [],
   });
 
+  const { user } = useAuth();
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -44,21 +47,18 @@ export default function CreateListingScreen() {
     }
   };
 
-  const uploadImage = async (base64File: string) => {
-    const filePath = `${Math.random().toString(36).substring(7)}.jpg`;
-    const { error } = await supabase.storage
-      .from('parking-images')
-      .upload(filePath, decode(base64File), {
-        contentType: 'image/jpeg',
-      });
-
-    if (error) throw error;
-    
-    const { data } = supabase.storage
-      .from('parking-images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
+  const uploadImage = async (uri: string) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const storageRef = ref(storage, `images/${Date.now()}-${uri.split('/').pop()}`);
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return null;
+    }
   };
 
   const handleSubmit = async () => {
@@ -70,36 +70,21 @@ export default function CreateListingScreen() {
         return;
       }
 
+      if (!user) {
+        Alert.alert('Error', 'User not authenticated');
+        return;
+      }
+
       // Upload images and get their URLs
-      const imageUrls = await Promise.all(
-        form.images.map(async (uri) => {
-          const response = await fetch(uri);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          return new Promise<string>((resolve, reject) => {
-            reader.onload = async () => {
-              try {
-                const base64 = (reader.result as string).split(',')[1];
-                const url = await uploadImage(base64);
-                resolve(url);
-              } catch (error) {
-                reject(error);
-              }
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        })
-      );
+      const imageUrls = await Promise.all(form.images.map(image => uploadImage(image)));
 
       // Create the listing
-      await createListing({
-        title: form.title,
-        address: form.address,
-        description: form.description,
-        price: parseFloat(form.price),
+      const listingData = {
+        ...form,
         images: imageUrls,
-      });
+        host_id: user.uid, // Assuming user is available from context
+      };
+      await createListing(listingData);
 
       router.back();
     } catch (error) {
