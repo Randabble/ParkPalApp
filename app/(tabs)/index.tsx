@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { getListings, deleteListing } from '@/lib/listings';
 
-type ParkingListing = {
+type Listing = {
   id: string;
   host_id: string;
   title: string;
@@ -20,7 +20,7 @@ type ParkingListing = {
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const [listings, setListings] = useState<ParkingListing[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
 
   useEffect(() => {
     console.log('Current user role:', user?.role);
@@ -47,24 +47,13 @@ export default function HomeScreen() {
     }
   };
 
-  const renderListing = ({ item }: { item: ParkingListing }) => (
+  const renderListing = ({ item }: { item: Listing }) => (
     <View style={styles.card}>
-      <View style={styles.imageContainer}>
-        {item.images && item.images.length > 0 ? (
-          <Image source={{ uri: item.images[0] }} style={styles.image} />
-        ) : (
-          <View style={styles.placeholderImage}>
-            <FontAwesome name="car" size={40} color="#ccc" />
-          </View>
-        )}
-      </View>
+      <Image source={{ uri: item.images[0] }} style={styles.image} />
       <View style={styles.cardContent}>
-        <ThemedText type="subtitle" style={styles.title}>{item.title}</ThemedText>
+        <ThemedText style={styles.title}>{item.title}</ThemedText>
         <ThemedText style={styles.address}>{item.address}</ThemedText>
-        <View style={styles.ratingContainer}>
-          <FontAwesome name="star" size={16} color="#FFD700" />
-          <ThemedText style={styles.rating}>{item.rating?.toFixed(1) || 'N/A'}</ThemedText>
-        </View>
+        <ThemedText style={styles.description}>{item.description}</ThemedText>
         <ThemedText style={styles.price}>${item.price}/hour</ThemedText>
         {user?.uid === item.host_id && (
           <TouchableOpacity onPress={() => handleDelete(item.id)}>
@@ -137,51 +126,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     marginBottom: 15,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  imageContainer: {
-    height: 200,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    overflow: 'hidden',
-  },
   image: {
     width: '100%',
-    height: '100%',
-  },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    height: 200,
   },
   cardContent: {
     padding: 15,
   },
   title: {
     fontSize: 18,
-    marginBottom: 5,
+    fontWeight: 'bold',
   },
   address: {
     color: '#666',
     marginBottom: 5,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  rating: {
-    marginLeft: 5,
+  description: {
     color: '#666',
+    marginBottom: 5,
   },
   price: {
     fontSize: 16,
