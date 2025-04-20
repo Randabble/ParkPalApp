@@ -6,21 +6,34 @@ import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { getListings, deleteListing } from '@/lib/listings';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 
-type ParkingListing = {
+type RootStackParamList = {
+  Home: undefined;
+  DetailView: { listing: Listing };
+};
+
+type NavigationProp = StackNavigationProp<RootStackParamList>;
+
+type Listing = {
   id: string;
   host_id: string;
+  host_name?: string;
+  host_image?: string;
   title: string;
   description: string;
   address: string;
   price: string;
   images: string[];
   rating?: number;
+  host_email?: string;
 };
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const [listings, setListings] = useState<ParkingListing[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const navigation = useNavigation<NavigationProp>();
 
   useEffect(() => {
     console.log('Current user role:', user?.role);
@@ -47,39 +60,78 @@ export default function HomeScreen() {
     }
   };
 
-  const renderListing = ({ item }: { item: ParkingListing }) => (
-    <View style={styles.card}>
-      <View style={styles.imageContainer}>
-        {item.images && item.images.length > 0 ? (
-          <Image source={{ uri: item.images[0] }} style={styles.image} />
-        ) : (
-          <View style={styles.placeholderImage}>
-            <FontAwesome name="car" size={40} color="#ccc" />
-          </View>
-        )}
-      </View>
-      <View style={styles.cardContent}>
-        <ThemedText type="subtitle" style={styles.title}>{item.title}</ThemedText>
-        <ThemedText style={styles.address}>{item.address}</ThemedText>
-        <View style={styles.ratingContainer}>
-          <FontAwesome name="star" size={16} color="#FFD700" />
-          <ThemedText style={styles.rating}>{item.rating?.toFixed(1) || 'N/A'}</ThemedText>
+  const renderListing = ({ item }: { item: Listing }) => (
+    <TouchableOpacity 
+      onPress={() => router.push({
+        pathname: '/listing/DetailView',
+        params: { 
+          id: item.id,
+          host_id: item.host_id,
+          host_name: item.host_email,
+          host_image: item.host_image,
+          title: item.title,
+          description: item.description,
+          address: item.address,
+          price: item.price,
+          images: item.images,
+          rating: item.rating?.toString()
+        }
+      })}
+      style={styles.cardContainer}
+    >
+      <View style={styles.card}>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.images[0] }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+          {item.rating && (
+            <View style={styles.ratingBadge}>
+              <FontAwesome name="star" size={12} color="#FFD700" />
+              <ThemedText style={styles.ratingText}>{item.rating.toFixed(1)}</ThemedText>
+            </View>
+          )}
         </View>
-        <ThemedText style={styles.price}>${item.price}/hour</ThemedText>
-        {user?.uid === item.host_id && (
-          <TouchableOpacity onPress={() => handleDelete(item.id)}>
-            <FontAwesome name="trash" size={24} color="red" />
-          </TouchableOpacity>
-        )}
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <View style={styles.titleContainer}>
+              <ThemedText style={styles.title} numberOfLines={1}>{item.title}</ThemedText>
+              <ThemedText style={styles.hostInfo} numberOfLines={1}>Listed by {item.host_email}</ThemedText>
+              <ThemedText style={styles.address} numberOfLines={1}>{item.address}</ThemedText>
+            </View>
+            {item.host_image ? (
+              <Image 
+                source={{ uri: item.host_image }} 
+                style={styles.hostImage}
+              />
+            ) : (
+              <View style={[styles.hostImage, styles.hostImagePlaceholder]}>
+                <FontAwesome name="user" size={16} color="#666" />
+              </View>
+            )}
+          </View>
+          <ThemedText style={styles.price}>
+            <ThemedText style={styles.priceAmount}>${item.price}</ThemedText>/hour
+          </ThemedText>
+          {user?.uid === item.host_id && (
+            <TouchableOpacity 
+              onPress={() => handleDelete(item.id)}
+              style={styles.deleteButton}
+            >
+              <FontAwesome name="trash" size={20} color="#FF385C" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ThemedView style={styles.container}>
         <View style={styles.header}>
-          <ThemedText type="title">Available Parking Spots</ThemedText>
+          <ThemedText style={styles.headerTitle}>Available Parking Spots</ThemedText>
         </View>
 
         {listings.length === 0 ? (
@@ -93,23 +145,21 @@ export default function HomeScreen() {
             renderItem={renderListing}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
           />
         )}
 
-        {(() => {
-          console.log('Rendering FAB - User role:', user?.role);
-          return user?.role === 'host' && (
-            <TouchableOpacity 
-              style={[styles.fab, { elevation: 8 }]}
-              onPress={() => {
-                console.log('FAB pressed - navigating to create listing');
-                router.push('/listing/create');
-              }}
-            >
-              <FontAwesome name="plus" size={24} color="white" />
-            </TouchableOpacity>
-          );
-        })()}
+        {user?.role === 'host' && (
+          <TouchableOpacity 
+            style={styles.fab}
+            onPress={() => {
+              console.log('FAB pressed - navigating to create listing');
+              router.push('/listing/create');
+            }}
+          >
+            <FontAwesome name="plus" size={24} color="white" />
+          </TouchableOpacity>
+        )}
       </ThemedView>
     </SafeAreaView>
   );
@@ -122,71 +172,109 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    position: 'relative',
   },
   header: {
     padding: 20,
     paddingTop: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   listContainer: {
-    padding: 20,
-    paddingTop: 0,
+    padding: 16,
     paddingBottom: 80,
+  },
+  cardContainer: {
+    marginBottom: 20,
   },
   card: {
     backgroundColor: 'white',
     borderRadius: 12,
-    marginBottom: 15,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   imageContainer: {
+    position: 'relative',
     height: 200,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    overflow: 'hidden',
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
+  ratingBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    color: 'white',
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  hostInfo: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  address: {
+    fontSize: 14,
+    color: '#666',
+  },
+  hostImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  hostImagePlaceholder: {
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cardContent: {
-    padding: 15,
-  },
-  title: {
-    fontSize: 18,
-    marginBottom: 5,
-  },
-  address: {
-    color: '#666',
-    marginBottom: 5,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  rating: {
-    marginLeft: 5,
-    color: '#666',
-  },
   price: {
+    fontSize: 14,
+    color: '#666',
+  },
+  priceAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#007AFF',
+  },
+  deleteButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
   },
   emptyState: {
     flex: 1,
@@ -204,7 +292,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#FF385C',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
