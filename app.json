@@ -7,7 +7,7 @@
     "icon": "./app/assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sreekokkonda.Parkdemo",
@@ -45,16 +45,7 @@
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "d08dfb4c-790e-4e19-aebd-8b0c7c7e0ace"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/d08dfb4c-790e-4e19-aebd-8b0c7c7e0ace"
     }
   }
 }
