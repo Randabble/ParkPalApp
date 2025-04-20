@@ -6,6 +6,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { getListings, deleteListing } from '@/lib/listings';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+
+type RootStackParamList = {
+  Home: undefined;
+  DetailView: { listing: Listing };
+};
+
+type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 type Listing = {
   id: string;
@@ -21,6 +30,7 @@ type Listing = {
 export default function HomeScreen() {
   const { user } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
+  const navigation = useNavigation<NavigationProp>();
 
   useEffect(() => {
     console.log('Current user role:', user?.role);
@@ -48,20 +58,34 @@ export default function HomeScreen() {
   };
 
   const renderListing = ({ item }: { item: Listing }) => (
-    <View style={styles.card}>
-      <Image source={{ uri: item.images[0] }} style={styles.image} />
-      <View style={styles.cardContent}>
-        <ThemedText style={styles.title}>{item.title}</ThemedText>
-        <ThemedText style={styles.address}>{item.address}</ThemedText>
-        <ThemedText style={styles.description}>{item.description}</ThemedText>
-        <ThemedText style={styles.price}>${item.price}/hour</ThemedText>
-        {user?.uid === item.host_id && (
-          <TouchableOpacity onPress={() => handleDelete(item.id)}>
-            <FontAwesome name="trash" size={24} color="red" />
-          </TouchableOpacity>
-        )}
+    <TouchableOpacity onPress={() => router.push({
+      pathname: '/listing/DetailView',
+      params: { 
+        id: item.id,
+        host_id: item.host_id,
+        title: item.title,
+        description: item.description,
+        address: item.address,
+        price: item.price,
+        images: item.images,
+        rating: item.rating
+      }
+    })}>
+      <View style={styles.card}>
+        <Image source={{ uri: item.images[0] }} style={styles.image} />
+        <View style={styles.cardContent}>
+          <ThemedText style={styles.title}>{item.title}</ThemedText>
+          <ThemedText style={styles.address}>{item.address}</ThemedText>
+          <ThemedText style={styles.description}>{item.description}</ThemedText>
+          <ThemedText style={styles.price}>${item.price}/hour</ThemedText>
+          {user?.uid === item.host_id && (
+            <TouchableOpacity onPress={() => handleDelete(item.id)}>
+              <FontAwesome name="trash" size={24} color="red" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
