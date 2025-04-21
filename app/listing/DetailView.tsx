@@ -33,6 +33,7 @@ export default function DetailView() {
       const parsed = JSON.parse(params.images);
       console.log('Raw params.images:', params.images);
       console.log('Parsed images array:', parsed);
+      console.log('Firebase Storage Bucket:', storage.app.options.storageBucket);
       setParsedImages(parsed);
     } catch (error) {
       console.error('Error parsing images:', error, 'Raw images string:', params.images);
@@ -43,6 +44,7 @@ export default function DetailView() {
   // Load images only when parsedImages changes
   useEffect(() => {
     const loadImages = async () => {
+      console.log('Starting to load images...');
       // Reset states
       const newLoadedImages: {[key: string]: string} = {};
       const newErrors: {[key: string]: string} = {};
@@ -50,6 +52,8 @@ export default function DetailView() {
       // Process each image URL
       for (let index = 0; index < parsedImages.length; index++) {
         const imageUrl = parsedImages[index];
+        console.log(`Processing image ${index}:`, imageUrl);
+        
         if (!imageUrl) {
           console.error(`Missing image URL at index ${index}`);
           newErrors[index] = 'Missing image URL';
@@ -59,13 +63,24 @@ export default function DetailView() {
         try {
           // For Firebase Storage URLs, try to get a fresh download URL
           if (imageUrl.includes('firebasestorage.googleapis.com')) {
+            console.log(`Image ${index} is a Firebase Storage URL`);
             const pathArray = imageUrl.split('/');
             const fileName = pathArray[pathArray.length - 1].split('?')[0];
+            console.log(`Extracted filename: ${fileName}`);
             const imageRef = ref(storage, `images/${fileName}`);
-            const freshUrl = await getDownloadURL(imageRef);
-            console.log(`Got fresh URL for image ${index}:`, freshUrl);
-            newLoadedImages[index] = freshUrl;
+            console.log(`Created storage ref: ${imageRef.fullPath}`);
+            try {
+              const freshUrl = await getDownloadURL(imageRef);
+              console.log(`Got fresh URL for image ${index}:`, freshUrl);
+              newLoadedImages[index] = freshUrl;
+            } catch (downloadError: any) {
+              console.error(`Failed to get download URL for image ${index}:`, downloadError?.message || downloadError);
+              // Try using the original URL as fallback
+              console.log(`Trying original URL as fallback for image ${index}`);
+              newLoadedImages[index] = imageUrl;
+            }
           } else {
+            console.log(`Using original URL for image ${index}`);
             newLoadedImages[index] = imageUrl;
           }
         } catch (error: any) {
@@ -75,6 +90,9 @@ export default function DetailView() {
         }
       }
 
+      console.log('Final loaded images:', newLoadedImages);
+      console.log('Final errors:', newErrors);
+      
       // Update state once for all images
       setLoadedImages(newLoadedImages);
       setImageErrors(newErrors);
