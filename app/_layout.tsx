@@ -22,6 +22,27 @@ export default function RootLayout() {
               presentation: 'modal',
             }} 
           />
+          <Stack.Screen 
+            name="listing/DetailView" 
+            options={{ 
+              headerShown: false,
+              presentation: 'card',
+            }} 
+          />
+          <Stack.Screen 
+            name="profile/[id]" 
+            options={{ 
+              headerShown: false,
+              presentation: 'card',
+            }} 
+          />
+          <Stack.Screen 
+            name="profile/edit" 
+            options={{ 
+              headerShown: false,
+              presentation: 'modal',
+            }} 
+          />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

@@ -50,16 +50,31 @@ export const getListings = async () => {
 
 export const getListingsByHostId = async (hostId: string) => {
   try {
-    const q = query(
-      collection(db, 'listings'),
-      where('host_id', '==', hostId),
-      orderBy('created_at', 'desc')
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Listing[];
+    // First try with ordering
+    try {
+      const q = query(
+        collection(db, 'listings'),
+        where('host_id', '==', hostId),
+        orderBy('created_at', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Listing[];
+    } catch (indexError) {
+      // If index doesn't exist yet, fetch without ordering
+      console.log('Falling back to unordered query while index builds...');
+      const q = query(
+        collection(db, 'listings'),
+        where('host_id', '==', hostId)
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Listing[];
+    }
   } catch (error) {
     console.error('Error getting host listings:', error);
     throw error;

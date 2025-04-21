@@ -97,19 +97,24 @@ export default function HomeScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.titleContainer}>
               <ThemedText style={styles.title} numberOfLines={1}>{item.title}</ThemedText>
-              <ThemedText style={styles.hostInfo} numberOfLines={1}>Listed by {item.host_email}</ThemedText>
+              <TouchableOpacity 
+                onPress={() => router.push(`/profile/${item.host_id}`)}
+                style={styles.hostInfoContainer}
+              >
+                <ThemedText style={styles.hostInfo} numberOfLines={1}>Listed by {item.host_email}</ThemedText>
+                {item.host_image ? (
+                  <Image 
+                    source={{ uri: item.host_image }} 
+                    style={styles.hostImage}
+                  />
+                ) : (
+                  <View style={[styles.hostImage, styles.hostImagePlaceholder]}>
+                    <FontAwesome name="user" size={16} color="#666" />
+                  </View>
+                )}
+              </TouchableOpacity>
               <ThemedText style={styles.address} numberOfLines={1}>{item.address}</ThemedText>
             </View>
-            {item.host_image ? (
-              <Image 
-                source={{ uri: item.host_image }} 
-                style={styles.hostImage}
-              />
-            ) : (
-              <View style={[styles.hostImage, styles.hostImagePlaceholder]}>
-                <FontAwesome name="user" size={16} color="#666" />
-              </View>
-            )}
           </View>
           <ThemedText style={styles.price}>
             <ThemedText style={styles.priceAmount}>${item.price}</ThemedText>/hour
@@ -242,6 +247,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  hostInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   hostInfo: {
     fontSize: 12,

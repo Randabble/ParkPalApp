@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, Platform, Linking } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
+import { storage } from '@/lib/firebase';
+import { ref, getDownloadURL } from 'firebase/storage';
 
 type RouteParams = {
   id: string;
@@ -12,7 +14,7 @@ type RouteParams = {
   description: string;
   address: string;
   price: string;
-  images: string[];
+  images: string;
   rating?: string;
   host_name?: string;
   host_image?: string;
@@ -20,11 +22,77 @@ type RouteParams = {
 
 export default function DetailView() {
   const params = useLocalSearchParams<RouteParams>();
-  const images = typeof params.images === 'string' 
-    ? JSON.parse(params.images) 
-    : [];
-  const rating = params.rating ? parseFloat(params.rating) : undefined;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [loadedImages, setLoadedImages] = useState<{[key: string]: string}>({});
+  const [imageErrors, setImageErrors] = useState<{[key: string]: string}>({});
+  const [parsedImages, setParsedImages] = useState<string[]>([]);
+  
+  // Parse the images array once when params change
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(params.images);
+      console.log('Raw params.images:', params.images);
+      console.log('Parsed images array:', parsed);
+      setParsedImages(parsed);
+    } catch (error) {
+      console.error('Error parsing images:', error, 'Raw images string:', params.images);
+      setParsedImages([]);
+    }
+  }, [params.images]);
+
+  // Load images only when parsedImages changes
+  useEffect(() => {
+    const loadImages = async () => {
+      // Reset states
+      const newLoadedImages: {[key: string]: string} = {};
+      const newErrors: {[key: string]: string} = {};
+
+      // Process each image URL
+      for (let index = 0; index < parsedImages.length; index++) {
+        const imageUrl = parsedImages[index];
+        if (!imageUrl) {
+          console.error(`Missing image URL at index ${index}`);
+          newErrors[index] = 'Missing image URL';
+          continue;
+        }
+
+        try {
+          // For Firebase Storage URLs, try to get a fresh download URL
+          if (imageUrl.includes('firebasestorage.googleapis.com')) {
+            const pathArray = imageUrl.split('/');
+            const fileName = pathArray[pathArray.length - 1].split('?')[0];
+            const imageRef = ref(storage, `images/${fileName}`);
+            const freshUrl = await getDownloadURL(imageRef);
+            console.log(`Got fresh URL for image ${index}:`, freshUrl);
+            newLoadedImages[index] = freshUrl;
+          } else {
+            newLoadedImages[index] = imageUrl;
+          }
+        } catch (error: any) {
+          const errorMessage = error?.message || 'Unknown error occurred';
+          console.error(`Error processing image ${index}:`, errorMessage);
+          newErrors[index] = errorMessage;
+        }
+      }
+
+      // Update state once for all images
+      setLoadedImages(newLoadedImages);
+      setImageErrors(newErrors);
+    };
+
+    loadImages();
+  }, [parsedImages]);
+
+  const handleImageError = React.useCallback((index: number, error: any) => {
+    const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
+    console.error(`Image ${index} loading error:`, errorMessage);
+    setImageErrors(prev => ({
+      ...prev,
+      [index]: errorMessage
+    }));
+  }, []);
+
+  const rating = params.rating ? parseFloat(params.rating) : undefined;
 
   const openInMaps = () => {
     const address = encodeURIComponent(params.address);
@@ -38,7 +106,7 @@ export default function DetailView() {
 
   const renderImagePagination = () => (
     <View style={styles.paginationContainer}>
-      {images.map((_: string, index: number) => (
+      {parsedImages.map((_: string, index: number) => (
         <View
           key={index}
           style={[
@@ -54,7 +122,7 @@ export default function DetailView() {
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scrollView} bounces={false}>
         {/* Image Carousel */}
-        <View style={styles.imageContainer}>
+        <View style={styles.carouselContainer}>
           <ScrollView
             horizontal
             pagingEnabled
@@ -63,20 +131,40 @@ export default function DetailView() {
               const newIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
               setActiveImageIndex(newIndex);
             }}
+            style={styles.imageScrollView}
           >
-            {images.map((image: string, index: number) => (
-              <Image
-                key={index}
-                source={{ uri: image }}
-                style={styles.image}
-                resizeMode="cover"
-              />
-            ))}
+            {parsedImages.map((_, index: number) => {
+              const imageUrl = loadedImages[index];
+              const hasError = !!imageErrors[index];
+              
+              return (
+                <View key={index} style={styles.imageWrapper}>
+                  {hasError ? (
+                    <View style={styles.errorOverlay}>
+                      <FontAwesome name="exclamation-circle" size={24} color="#FF385C" />
+                      <ThemedText style={styles.errorText}>Failed to load image</ThemedText>
+                      <ThemedText style={styles.errorSubtext}>Please try again later</ThemedText>
+                    </View>
+                  ) : !imageUrl ? (
+                    <View style={styles.loadingOverlay}>
+                      <ThemedText>Loading...</ThemedText>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.image}
+                      resizeMode="cover"
+                      onError={(error) => handleImageError(index, error)}
+                    />
+                  )}
+                </View>
+              );
+            })}
           </ScrollView>
           {renderImagePagination()}
         </View>
 
-        {/* Back Button */}
+        {/* Back Button - Move it after the carousel container */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
@@ -91,7 +179,10 @@ export default function DetailView() {
           <ThemedText style={styles.title}>{params.title}</ThemedText>
           
           {/* Host Info */}
-          <View style={styles.hostContainer}>
+          <TouchableOpacity 
+            style={styles.hostContainer}
+            onPress={() => router.push(`/profile/${params.host_id}`)}
+          >
             {params.host_image ? (
               <Image source={{ uri: params.host_image }} style={styles.hostImage} />
             ) : (
@@ -102,7 +193,8 @@ export default function DetailView() {
             <ThemedText style={styles.hostName}>
               {params.host_name || 'Host'}
             </ThemedText>
-          </View>
+            <FontAwesome name="chevron-right" size={12} color="#666" style={styles.hostArrow} />
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={openInMaps} style={styles.addressContainer}>
             <FontAwesome name="map-marker" size={16} color="#666" />
@@ -149,25 +241,35 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  imageContainer: {
+  carouselContainer: {
     height: 300,
+    width: '100%',
     position: 'relative',
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
   },
-  image: {
+  imageScrollView: {
+    flex: 1,
+  },
+  imageWrapper: {
     width: screenWidth,
     height: 300,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
   },
   headerBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
     height: Platform.OS === 'ios' ? 100 : 70,
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   backButton: {
     width: 40,
@@ -181,6 +283,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+    zIndex: 10,
   },
   paginationContainer: {
     position: 'absolute',
@@ -216,6 +319,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
+    backgroundColor: '#f8f8f8',
+    padding: 12,
+    borderRadius: 8,
   },
   hostImage: {
     width: 40,
@@ -231,6 +337,9 @@ const styles = StyleSheet.create({
   hostName: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  hostArrow: {
+    marginLeft: 'auto',
   },
   addressContainer: {
     flexDirection: 'row',
@@ -305,5 +414,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  loadingOverlay: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorOverlay: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#FF385C',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: 'center',
   },
 }); 

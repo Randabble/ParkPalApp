@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { auth } from '../firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, User } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 
 type User = {
   id: string;
@@ -80,9 +79,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, role: 'host' | 'driver') => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      await setDoc(doc(db, 'users', user.uid), { email, role });
+      // Create user document in Firestore
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email,
+        role,
+        displayName: '',
+        description: '',
+        contactInfo: '',
+        photoURL: null,
+        rating: 0,
+        reviewCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      return userCredential;
     } catch (error) {
+      console.error('Error in signUp:', error);
       throw error;
     }
   };
