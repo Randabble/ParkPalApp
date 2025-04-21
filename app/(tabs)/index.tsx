@@ -73,7 +73,7 @@ export default function HomeScreen() {
           description: item.description,
           address: item.address,
           price: item.price,
-          images: item.images,
+          images: JSON.stringify(item.images),
           rating: item.rating?.toString()
         }
       })}

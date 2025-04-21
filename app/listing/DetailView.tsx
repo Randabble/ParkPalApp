@@ -20,7 +20,9 @@ type RouteParams = {
 
 export default function DetailView() {
   const params = useLocalSearchParams<RouteParams>();
-  const images = typeof params.images === 'string' ? [params.images] : (params.images || []);
+  const images = typeof params.images === 'string' 
+    ? JSON.parse(params.images) 
+    : [];
   const rating = params.rating ? parseFloat(params.rating) : undefined;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
@@ -36,7 +38,7 @@ export default function DetailView() {
 
   const renderImagePagination = () => (
     <View style={styles.paginationContainer}>
-      {images.map((_, index) => (
+      {images.map((_: string, index: number) => (
         <View
           key={index}
           style={[
@@ -62,7 +64,7 @@ export default function DetailView() {
               setActiveImageIndex(newIndex);
             }}
           >
-            {images.map((image, index) => (
+            {images.map((image: string, index: number) => (
               <Image
                 key={index}
                 source={{ uri: image }}
