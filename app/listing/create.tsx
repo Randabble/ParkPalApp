@@ -6,9 +6,9 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { createListing } from '@/lib/listings';
-import { db, storage, auth } from '../../firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ListingForm = {
   title: string;
@@ -77,12 +77,13 @@ export default function CreateListingScreen() {
 
       // Upload images and get their URLs
       const imageUrls = await Promise.all(form.images.map(image => uploadImage(image)));
+      const validImageUrls = imageUrls.filter((url): url is string => url !== null);
 
       // Create the listing
       const listingData = {
         ...form,
-        images: imageUrls,
-        host_id: user.uid, // Assuming user is available from context
+        images: validImageUrls,
+        host_id: user.uid,
       };
       await createListing(listingData);
 

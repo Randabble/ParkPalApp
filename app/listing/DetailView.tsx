@@ -14,7 +14,7 @@ type RouteParams = {
   description: string;
   address: string;
   price: string;
-  images: string[];
+  images: string;
   rating?: string;
   host_name?: string;
   host_image?: string;
@@ -26,56 +26,91 @@ export default function DetailView() {
   const [loadedImages, setLoadedImages] = useState<{[key: string]: string}>({});
   const [imageErrors, setImageErrors] = useState<{[key: string]: string}>({});
   const [parsedImages, setParsedImages] = useState<string[]>([]);
-
+  
   // Parse the images array once when params change
   useEffect(() => {
     try {
-      const parsed = typeof params.images === 'string' ? JSON.parse(params.images) : [];
+      const parsed = JSON.parse(params.images);
+      console.log('Raw params.images:', params.images);
+      console.log('Parsed images array:', parsed);
+      console.log('Firebase Storage Bucket:', storage.app.options.storageBucket);
       setParsedImages(parsed);
     } catch (error) {
-      console.error('Error parsing images:', error);
+      console.error('Error parsing images:', error, 'Raw images string:', params.images);
       setParsedImages([]);
     }
   }, [params.images]);
 
   // Load images only when parsedImages changes
   useEffect(() => {
-    if (parsedImages.length === 0) return;
-
     const loadImages = async () => {
+      console.log('Starting to load images...');
+      // Reset states
       const newLoadedImages: {[key: string]: string} = {};
       const newErrors: {[key: string]: string} = {};
 
+      // Process each image URL
       for (let index = 0; index < parsedImages.length; index++) {
         const imageUrl = parsedImages[index];
-        if (!imageUrl) continue;
+        console.log(`Processing image ${index}:`, imageUrl);
+        
+        if (!imageUrl) {
+          console.error(`Missing image URL at index ${index}`);
+          newErrors[index] = 'Missing image URL';
+          continue;
+        }
 
         try {
+          // For Firebase Storage URLs, try to get a fresh download URL
           if (imageUrl.includes('firebasestorage.googleapis.com')) {
+            console.log(`Image ${index} is a Firebase Storage URL`);
             const pathArray = imageUrl.split('/');
             const fileName = pathArray[pathArray.length - 1].split('?')[0];
+            console.log(`Extracted filename: ${fileName}`);
             const imageRef = ref(storage, `images/${fileName}`);
+            console.log(`Created storage ref: ${imageRef.fullPath}`);
             try {
               const freshUrl = await getDownloadURL(imageRef);
+              console.log(`Got fresh URL for image ${index}:`, freshUrl);
               newLoadedImages[index] = freshUrl;
-            } catch (downloadError) {
-              // If we can't get a fresh URL, use the original one
+            } catch (downloadError: any) {
+              console.error(`Failed to get download URL for image ${index}:`, downloadError?.message || downloadError);
+              // Try using the original URL as fallback
+              console.log(`Trying original URL as fallback for image ${index}`);
               newLoadedImages[index] = imageUrl;
             }
           } else {
+            console.log(`Using original URL for image ${index}`);
             newLoadedImages[index] = imageUrl;
           }
-        } catch (error) {
-          newErrors[index] = 'Failed to load image';
+        } catch (error: any) {
+          const errorMessage = error?.message || 'Unknown error occurred';
+          console.error(`Error processing image ${index}:`, errorMessage);
+          newErrors[index] = errorMessage;
         }
       }
 
+      console.log('Final loaded images:', newLoadedImages);
+      console.log('Final errors:', newErrors);
+      
+      // Update state once for all images
       setLoadedImages(newLoadedImages);
       setImageErrors(newErrors);
     };
 
     loadImages();
   }, [parsedImages]);
+
+  const handleImageError = React.useCallback((index: number, error: any) => {
+    const errorMessage = error?.nativeEvent?.error || 'Failed to load image';
+    console.error(`Image ${index} loading error:`, errorMessage);
+    setImageErrors(prev => ({
+      ...prev,
+      [index]: errorMessage
+    }));
+  }, []);
+
+  const rating = params.rating ? parseFloat(params.rating) : undefined;
 
   const openInMaps = () => {
     const address = encodeURIComponent(params.address);
@@ -116,7 +151,7 @@ export default function DetailView() {
             }}
             style={styles.imageScrollView}
           >
-            {parsedImages.map((_, index) => {
+            {parsedImages.map((_, index: number) => {
               const imageUrl = loadedImages[index];
               const hasError = !!imageErrors[index];
               
@@ -126,6 +161,7 @@ export default function DetailView() {
                     <View style={styles.errorOverlay}>
                       <FontAwesome name="exclamation-circle" size={24} color="#FF385C" />
                       <ThemedText style={styles.errorText}>Failed to load image</ThemedText>
+                      <ThemedText style={styles.errorSubtext}>Please try again later</ThemedText>
                     </View>
                   ) : !imageUrl ? (
                     <View style={styles.loadingOverlay}>
@@ -133,16 +169,10 @@ export default function DetailView() {
                     </View>
                   ) : (
                     <Image
-                      key={`image-${index}-${imageUrl}`}
                       source={{ uri: imageUrl }}
                       style={styles.image}
                       resizeMode="cover"
-                      onError={() => {
-                        setImageErrors(prev => ({
-                          ...prev,
-                          [index]: 'Failed to load image'
-                        }));
-                      }}
+                      onError={(error) => handleImageError(index, error)}
                     />
                   )}
                 </View>
@@ -152,13 +182,13 @@ export default function DetailView() {
           {renderImagePagination()}
         </View>
 
-        {/* Back Button with transparent background */}
+        {/* Back Button - Move it after the carousel container */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <FontAwesome name="arrow-left" size={24} color="white" />
+            <FontAwesome name="arrow-left" size={24} color="black" />
           </TouchableOpacity>
         </View>
 
@@ -167,7 +197,10 @@ export default function DetailView() {
           <ThemedText style={styles.title}>{params.title}</ThemedText>
           
           {/* Host Info */}
-          <View style={styles.hostContainer}>
+          <TouchableOpacity 
+            style={styles.hostContainer}
+            onPress={() => router.push(`/profile/${params.host_id}`)}
+          >
             {params.host_image ? (
               <Image source={{ uri: params.host_image }} style={styles.hostImage} />
             ) : (
@@ -178,7 +211,8 @@ export default function DetailView() {
             <ThemedText style={styles.hostName}>
               {params.host_name || 'Host'}
             </ThemedText>
-          </View>
+            <FontAwesome name="chevron-right" size={12} color="#666" style={styles.hostArrow} />
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={openInMaps} style={styles.addressContainer}>
             <FontAwesome name="map-marker" size={16} color="#666" />
@@ -186,10 +220,10 @@ export default function DetailView() {
             <FontAwesome name="chevron-right" size={12} color="#666" style={styles.addressArrow} />
           </TouchableOpacity>
 
-          {params.rating && (
+          {rating && (
             <View style={styles.ratingContainer}>
               <FontAwesome name="star" size={16} color="#FFD700" />
-              <ThemedText style={styles.rating}>{params.rating}</ThemedText>
+              <ThemedText style={styles.rating}>{rating.toFixed(1)}</ThemedText>
             </View>
           )}
 
@@ -227,8 +261,10 @@ const styles = StyleSheet.create({
   },
   carouselContainer: {
     height: 300,
+    width: '100%',
     position: 'relative',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   imageScrollView: {
     flex: 1,
@@ -257,7 +293,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -265,6 +301,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+    zIndex: 10,
   },
   paginationContainer: {
     position: 'absolute',
@@ -300,6 +337,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
+    backgroundColor: '#f8f8f8',
+    padding: 12,
+    borderRadius: 8,
   },
   hostImage: {
     width: 40,
@@ -315,6 +355,9 @@ const styles = StyleSheet.create({
   hostName: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  hostArrow: {
+    marginLeft: 'auto',
   },
   addressContainer: {
     flexDirection: 'row',
@@ -390,20 +433,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  errorOverlay: {
-    flex: 1,
+  loadingOverlay: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f8f8f8',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  errorOverlay: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   errorText: {
-    color: '#fff',
+    color: '#FF385C',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
   },
-  loadingOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  errorSubtext: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: 'center',
   },
 }); 

@@ -18,6 +18,12 @@ export default function AccountScreen() {
     return role === 'host' ? 'Parking Space Host' : 'Driver';
   };
 
+  const viewPublicProfile = () => {
+    if (user?.uid) {
+      router.push(`/profile/${user.uid}`);
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
@@ -30,8 +36,19 @@ export default function AccountScreen() {
 
       <View style={styles.section}>
         <ThemedText type="subtitle">Account Settings</ThemedText>
+        <TouchableOpacity style={styles.button} onPress={viewPublicProfile}>
+          <FontAwesome name="user" size={20} color="white" style={styles.buttonIcon} />
+          <ThemedText style={styles.buttonText}>View Public Profile</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.button}
+          onPress={() => router.push('/profile/edit')}
+        >
+          <FontAwesome name="edit" size={20} color="white" style={styles.buttonIcon} />
+          <ThemedText style={styles.buttonText}>Edit Profile</ThemedText>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={handleLogout}>
-          <FontAwesome name="sign-out" size={20} color="white" />
+          <FontAwesome name="sign-out" size={20} color="white" style={styles.buttonIcon} />
           <ThemedText style={styles.buttonText}>Log Out</ThemedText>
         </TouchableOpacity>
       </View>
@@ -73,5 +90,8 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonIcon: {
+    marginRight: 10,
   },
 }); 
