@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, Platform, Linking } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
+import { storage } from '@/lib/firebase';
+import { ref, getDownloadURL } from 'firebase/storage';
 
 type RouteParams = {
   id: string;
@@ -20,11 +22,60 @@ type RouteParams = {
 
 export default function DetailView() {
   const params = useLocalSearchParams<RouteParams>();
-  const images = typeof params.images === 'string' 
-    ? JSON.parse(params.images) 
-    : [];
-  const rating = params.rating ? parseFloat(params.rating) : undefined;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [loadedImages, setLoadedImages] = useState<{[key: string]: string}>({});
+  const [imageErrors, setImageErrors] = useState<{[key: string]: string}>({});
+  const [parsedImages, setParsedImages] = useState<string[]>([]);
+
+  // Parse the images array once when params change
+  useEffect(() => {
+    try {
+      const parsed = typeof params.images === 'string' ? JSON.parse(params.images) : [];
+      setParsedImages(parsed);
+    } catch (error) {
+      console.error('Error parsing images:', error);
+      setParsedImages([]);
+    }
+  }, [params.images]);
+
+  // Load images only when parsedImages changes
+  useEffect(() => {
+    if (parsedImages.length === 0) return;
+
+    const loadImages = async () => {
+      const newLoadedImages: {[key: string]: string} = {};
+      const newErrors: {[key: string]: string} = {};
+
+      for (let index = 0; index < parsedImages.length; index++) {
+        const imageUrl = parsedImages[index];
+        if (!imageUrl) continue;
+
+        try {
+          if (imageUrl.includes('firebasestorage.googleapis.com')) {
+            const pathArray = imageUrl.split('/');
+            const fileName = pathArray[pathArray.length - 1].split('?')[0];
+            const imageRef = ref(storage, `images/${fileName}`);
+            try {
+              const freshUrl = await getDownloadURL(imageRef);
+              newLoadedImages[index] = freshUrl;
+            } catch (downloadError) {
+              // If we can't get a fresh URL, use the original one
+              newLoadedImages[index] = imageUrl;
+            }
+          } else {
+            newLoadedImages[index] = imageUrl;
+          }
+        } catch (error) {
+          newErrors[index] = 'Failed to load image';
+        }
+      }
+
+      setLoadedImages(newLoadedImages);
+      setImageErrors(newErrors);
+    };
+
+    loadImages();
+  }, [parsedImages]);
 
   const openInMaps = () => {
     const address = encodeURIComponent(params.address);
@@ -38,7 +89,7 @@ export default function DetailView() {
 
   const renderImagePagination = () => (
     <View style={styles.paginationContainer}>
-      {images.map((_: string, index: number) => (
+      {parsedImages.map((_: string, index: number) => (
         <View
           key={index}
           style={[
@@ -54,7 +105,7 @@ export default function DetailView() {
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scrollView} bounces={false}>
         {/* Image Carousel */}
-        <View style={styles.imageContainer}>
+        <View style={styles.carouselContainer}>
           <ScrollView
             horizontal
             pagingEnabled
@@ -63,26 +114,51 @@ export default function DetailView() {
               const newIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
               setActiveImageIndex(newIndex);
             }}
+            style={styles.imageScrollView}
           >
-            {images.map((image: string, index: number) => (
-              <Image
-                key={index}
-                source={{ uri: image }}
-                style={styles.image}
-                resizeMode="cover"
-              />
-            ))}
+            {parsedImages.map((_, index) => {
+              const imageUrl = loadedImages[index];
+              const hasError = !!imageErrors[index];
+              
+              return (
+                <View key={index} style={styles.imageWrapper}>
+                  {hasError ? (
+                    <View style={styles.errorOverlay}>
+                      <FontAwesome name="exclamation-circle" size={24} color="#FF385C" />
+                      <ThemedText style={styles.errorText}>Failed to load image</ThemedText>
+                    </View>
+                  ) : !imageUrl ? (
+                    <View style={styles.loadingOverlay}>
+                      <ThemedText>Loading...</ThemedText>
+                    </View>
+                  ) : (
+                    <Image
+                      key={`image-${index}-${imageUrl}`}
+                      source={{ uri: imageUrl }}
+                      style={styles.image}
+                      resizeMode="cover"
+                      onError={() => {
+                        setImageErrors(prev => ({
+                          ...prev,
+                          [index]: 'Failed to load image'
+                        }));
+                      }}
+                    />
+                  )}
+                </View>
+              );
+            })}
           </ScrollView>
           {renderImagePagination()}
         </View>
 
-        {/* Back Button */}
+        {/* Back Button with transparent background */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <FontAwesome name="arrow-left" size={24} color="black" />
+            <FontAwesome name="arrow-left" size={24} color="white" />
           </TouchableOpacity>
         </View>
 
@@ -110,10 +186,10 @@ export default function DetailView() {
             <FontAwesome name="chevron-right" size={12} color="#666" style={styles.addressArrow} />
           </TouchableOpacity>
 
-          {rating && (
+          {params.rating && (
             <View style={styles.ratingContainer}>
               <FontAwesome name="star" size={16} color="#FFD700" />
-              <ThemedText style={styles.rating}>{rating.toFixed(1)}</ThemedText>
+              <ThemedText style={styles.rating}>{params.rating}</ThemedText>
             </View>
           )}
 
@@ -149,31 +225,39 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  imageContainer: {
+  carouselContainer: {
     height: 300,
     position: 'relative',
+    backgroundColor: '#f8f8f8',
   },
-  image: {
+  imageScrollView: {
+    flex: 1,
+  },
+  imageWrapper: {
     width: screenWidth,
     height: 300,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
   },
   headerBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
     height: Platform.OS === 'ios' ? 100 : 70,
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -305,5 +389,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  errorOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loadingOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 
