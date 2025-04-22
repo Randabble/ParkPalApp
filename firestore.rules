@@ -1,10 +1,99 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isHost(listingData) {
+      return isAuthenticated() && (
+        request.auth.uid == listingData.user_id ||
+        request.auth.uid == listingData.host_id
+      );
+    }
+    
+    function isBookingParticipant(bookingData) {
+      return isAuthenticated() && (
+        request.auth.uid == bookingData.user_id ||
+        request.auth.uid == bookingData.host_id ||
+        request.auth.uid == bookingData.listing_user_id
+      );
+    }
+    
+    function isListingOwner(listingData) {
+      return isAuthenticated() && (
+        request.auth.uid == listingData.user_id ||
+        request.auth.uid == listingData.host_id
+      );
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+    
+    // Listings collection
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.host_id;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.host_id;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || 
+         resource.data.host_id == request.auth.uid);
+    }
+    
+    // Bookings collection
+    match /bookings/{bookingId} {
+      // Allow reading a specific booking if user is involved
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        resource.data.host_id == request.auth.uid ||
+        resource.data.listing_user_id == request.auth.uid
+      );
+      
+      // Allow querying bookings
+      allow list: if isAuthenticated() && (
+        // Allow if user is querying their own bookings
+        ('user_id' in request.query.filters && request.query.filters.user_id == request.auth.uid) ||
+        // Allow if user is querying bookings for a listing they own
+        ('host_id' in request.query.filters && request.query.filters.host_id == request.auth.uid) ||
+        // Allow querying by listing_id for checking availability
+        ('listing_id' in request.query.filters)
+      );
+      
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        resource.data.host_id == request.auth.uid ||
+        resource.data.listing_user_id == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+    
+    // Messages collection - Ultra simplified rules
+    match /messages/{messageId} {
+      // Allow read if user is authenticated
+      allow read: if isAuthenticated();
+      
+      // Allow create if user is authenticated
+      allow create: if isAuthenticated();
+      
+      // Allow update/delete if user is the sender
+      allow update, delete: if isAuthenticated() && 
+        resource.data.sender_id == request.auth.uid;
     }
   }
 } 

@@ -1,12 +1,14 @@
-import { getFirestore, collection, addDoc, getDocs } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-export const addListing = async (listingData) => {
+export const addListing = async (listingData: any) => {
   try {
     const docRef = await addDoc(collection(db, 'listings'), listingData);
     console.log('Document written with ID:', docRef.id);
+    return docRef.id;
   } catch (error) {
     console.error('Error adding document:', error);
+    throw error;
   }
 };
 
@@ -18,5 +20,6 @@ export const getListings = async () => {
     return listings;
   } catch (error) {
     console.error('Error getting documents:', error);
+    throw error;
   }
 }; 

@@ -19,15 +19,15 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 type Listing = {
   id: string;
   host_id: string;
-  host_name?: string;
-  host_image?: string;
+  host_email?: string;
   title: string;
   description: string;
   address: string;
-  price: string;
+  price: number;
   images: string[];
   rating?: number;
-  host_email?: string;
+  created_at: Date;
+  status: string;
 };
 
 export default function HomeScreen() {
@@ -43,6 +43,7 @@ export default function HomeScreen() {
   const loadListings = async () => {
     try {
       const data = await getListings();
+      console.log('Loaded listings:', data);
       setListings(data || []);
     } catch (error) {
       console.error('Error loading listings:', error);
@@ -62,21 +63,7 @@ export default function HomeScreen() {
 
   const renderListing = ({ item }: { item: Listing }) => (
     <TouchableOpacity 
-      onPress={() => router.push({
-        pathname: '/listing/DetailView',
-        params: { 
-          id: item.id,
-          host_id: item.host_id,
-          host_name: item.host_email,
-          host_image: item.host_image,
-          title: item.title,
-          description: item.description,
-          address: item.address,
-          price: item.price,
-          images: JSON.stringify(item.images),
-          rating: item.rating?.toString()
-        }
-      })}
+      onPress={() => router.push(`/listing/${item.id}`)}
       style={styles.cardContainer}
     >
       <View style={styles.card}>
@@ -101,17 +88,9 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/profile/${item.host_id}`)}
                 style={styles.hostInfoContainer}
               >
-                <ThemedText style={styles.hostInfo} numberOfLines={1}>Listed by {item.host_email}</ThemedText>
-                {item.host_image ? (
-                  <Image 
-                    source={{ uri: item.host_image }} 
-                    style={styles.hostImage}
-                  />
-                ) : (
-                  <View style={[styles.hostImage, styles.hostImagePlaceholder]}>
-                    <FontAwesome name="user" size={16} color="#666" />
-                  </View>
-                )}
+                <ThemedText style={styles.hostInfo} numberOfLines={1}>
+                  Listed by {item.host_email || 'Host'}
+                </ThemedText>
               </TouchableOpacity>
               <ThemedText style={styles.address} numberOfLines={1}>{item.address}</ThemedText>
             </View>
@@ -260,16 +239,6 @@ const styles = StyleSheet.create({
   address: {
     fontSize: 14,
     color: '#666',
-  },
-  hostImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  hostImagePlaceholder: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   price: {
     fontSize: 14,

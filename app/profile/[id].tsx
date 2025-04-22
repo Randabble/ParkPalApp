@@ -52,21 +52,7 @@ export default function ProfileView() {
 
   const renderListing = ({ item }: any) => (
     <TouchableOpacity 
-      onPress={() => router.push({
-        pathname: '/listing/DetailView',
-        params: { 
-          id: item.id,
-          host_id: item.host_id,
-          host_name: item.host_email,
-          host_image: profile?.photoURL,
-          title: item.title,
-          description: item.description,
-          address: item.address,
-          price: item.price,
-          images: JSON.stringify(item.images),
-          rating: item.rating?.toString()
-        }
-      })}
+      onPress={() => router.push(`/listing/${item.id}`)}
       style={styles.listingCard}
     >
       <Image

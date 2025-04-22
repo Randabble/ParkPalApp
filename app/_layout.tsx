@@ -23,10 +23,17 @@ export default function RootLayout() {
             }} 
           />
           <Stack.Screen 
-            name="listing/DetailView" 
+            name="listing/[id]" 
             options={{ 
               headerShown: false,
               presentation: 'card',
+            }} 
+          />
+          <Stack.Screen 
+            name="listing/edit/[id]" 
+            options={{ 
+              headerShown: false,
+              presentation: 'modal',
             }} 
           />
           <Stack.Screen 
